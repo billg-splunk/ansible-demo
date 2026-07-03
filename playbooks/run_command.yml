@@ -9,6 +9,8 @@
   tasks:
     - name: Run a single shell command
       ansible.builtin.shell: "{{ the_command }}"
+      environment:
+        PATH: "{{ ansible_env.PATH }}:/usr/local/bin" # Add the directory where kubectl lives
       register: response
 
     - name: Print the output of the previous command

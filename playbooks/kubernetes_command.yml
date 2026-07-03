@@ -1,0 +1,96 @@
+---
+- name: Run an approved Kubernetes command
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    kube_command: get pods
+    kube_namespace: default
+    kube_context: ""
+    kube_all_namespaces: false
+    kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') | default(lookup('env', 'HOME') ~ '/.kube/config', true) }}"
+    allowed_kubectl_verbs:
+      - api-resources
+      - api-versions
+      - cluster-info
+      - describe
+      - get
+      - logs
+      - top
+      - version
+    cluster_scoped_verbs:
+      - api-resources
+      - api-versions
+      - cluster-info
+      - version
+    safe_argument_pattern: '^[A-Za-z0-9_./:=,@+-]+$'
+    forbidden_argument_pattern: >-
+      ^(-A|-n|--all-namespaces|--namespace($|=)|--context($|=)|--kubeconfig($|=)|--server($|=)|--token($|=)|--certificate-authority($|=)|--client-certificate($|=)|--client-key($|=)|--username($|=)|--password($|=)|--as($|=)|--as-group($|=)|--as-uid($|=))
+
+  tasks:
+    - name: Split requested kubectl command
+      ansible.builtin.set_fact:
+        kube_command_parts: "{{ kube_command | trim | split }}"
+
+    - name: Validate requested command
+      ansible.builtin.assert:
+        that:
+          - kube_command_parts | length > 0
+          - kube_command_parts[0] in allowed_kubectl_verbs
+          - kube_command_parts | select('match', safe_argument_pattern) | list | length == kube_command_parts | length
+          - kube_command_parts | select('match', forbidden_argument_pattern) | list | length == 0
+        fail_msg: >-
+          kube_command must start with one of {{ allowed_kubectl_verbs | join(', ') }},
+          every argument must match {{ safe_argument_pattern }}, and kubeconfig,
+          server, token, impersonation, context, and namespace flags must be set
+          through the dedicated AWX variables instead of kube_command.
+
+    - name: Start kubectl argument list
+      ansible.builtin.set_fact:
+        kubectl_argv:
+          - kubectl
+          - --kubeconfig
+          - "{{ kubeconfig_path }}"
+
+    - name: Add Kubernetes context
+      ansible.builtin.set_fact:
+        kubectl_argv: "{{ kubectl_argv + ['--context', kube_context] }}"
+      when: kube_context | length > 0
+
+    - name: Add Kubernetes namespace
+      ansible.builtin.set_fact:
+        kubectl_argv: "{{ kubectl_argv + ['--namespace', kube_namespace] }}"
+      when:
+        - kube_namespace | length > 0
+        - not kube_all_namespaces | bool
+        - kube_command_parts[0] not in cluster_scoped_verbs
+
+    - name: Add all namespaces flag
+      ansible.builtin.set_fact:
+        kubectl_argv: "{{ kubectl_argv + ['--all-namespaces'] }}"
+      when:
+        - kube_all_namespaces | bool
+        - kube_command_parts[0] not in cluster_scoped_verbs
+
+    - name: Add requested command
+      ansible.builtin.set_fact:
+        kubectl_argv: "{{ kubectl_argv + kube_command_parts }}"
+
+    - name: Show command that will run
+      ansible.builtin.debug:
+        msg: "{{ kubectl_argv | join(' ') }}"
+
+    - name: Run kubectl
+      ansible.builtin.command:
+        argv: "{{ kubectl_argv }}"
+      register: kubectl_result
+      changed_when: false
+
+    - name: Show kubectl stdout
+      ansible.builtin.debug:
+        var: kubectl_result.stdout_lines
+
+    - name: Show kubectl stderr
+      ansible.builtin.debug:
+        var: kubectl_result.stderr_lines
+      when: kubectl_result.stderr | length > 0

@@ -1,0 +1,13 @@
+---
+- name: Execute Shell Commands
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Run a single shell command
+      ansible.builtin.shell: "{{ the_command }}"
+      register: response
+
+    - name: Print the output of the previous command
+      ansible.builtin.debug:
+        msg: " {{ response.stdout }}"

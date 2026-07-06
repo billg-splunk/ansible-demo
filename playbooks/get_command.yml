@@ -1,7 +1,5 @@
 - name: Collect data for run_command.yml playbook
   hosts: all
-  vars:
-    the_command: "kubectl get nodes"
   
   tasks:
     - name: What command do you want to run?

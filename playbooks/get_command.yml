@@ -1,9 +1,0 @@
-- name: Collect data for run_command.yml playbook
-  hosts: all
-  
-  tasks:
-    - name: What command do you want to run?
-      ansible.builtin.set_stats:
-        data:
-          the_command: "{{ the_command }}"
-        per_host: false

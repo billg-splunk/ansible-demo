@@ -1,8 +1,11 @@
 - name: Collect data for run_command.yml playbook
   hosts: all
+  vars:
+    the_command: "kubectl get nodes"
+  
   tasks:
     - name: What command do you want to run?
       ansible.builtin.set_stats:
         data:
-          the_command: "kubectl get nodes"
+          the_command: "{{ the_command }}"
         per_host: false
